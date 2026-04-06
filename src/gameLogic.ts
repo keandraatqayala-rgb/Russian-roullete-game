@@ -78,12 +78,18 @@ const createPlayer = (id: number, name: string, isHuman: boolean, role: Role, pC
   };
 };
 
+const ROLES: Role[] = ['Doctor', 'Gambler', 'Assassin', 'Strategist', 'Guardian', 'Trickster', 'Reaper', 'Berserker'];
+const CLASSES: PlayerClass[] = ['Offense', 'Defense', 'Trickster', 'Precision', 'Chaos'];
+const PERSONALITIES: AIPersonality[] = ['Aggressive', 'Strategist', 'Deceiver', 'Survivor', 'Gambler'];
+
+const getRandomItem = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+
 export const createInitialState = (): GameState => {
   const players: Player[] = [
     createPlayer(0, 'You', true, 'Gambler', 'Chaos', 'None'),
-    createPlayer(1, 'AI 1 (Assassin)', false, 'Assassin', 'Offense', 'Aggressive'),
-    createPlayer(2, 'AI 2 (Doctor)', false, 'Doctor', 'Defense', 'Survivor'),
-    createPlayer(3, 'AI 3 (Strategist)', false, 'Strategist', 'Trickster', 'Strategist'),
+    createPlayer(1, 'AI 1', false, getRandomItem(ROLES), getRandomItem(CLASSES), getRandomItem(PERSONALITIES)),
+    createPlayer(2, 'AI 2', false, getRandomItem(ROLES), getRandomItem(CLASSES), getRandomItem(PERSONALITIES)),
+    createPlayer(3, 'AI 3', false, getRandomItem(ROLES), getRandomItem(CLASSES), getRandomItem(PERSONALITIES)),
   ];
 
   return {

@@ -66,19 +66,28 @@ export default function App() {
       const aliveOpponents = state.players.filter(p => p.isAlive && p.id !== me.id);
       if (aliveOpponents.length === 0) return;
 
-      let finalTarget = aliveOpponents[Math.floor(Math.random() * aliveOpponents.length)];
+      // 1. Determine Target based on Personality
+      let possibleTargets = [...aliveOpponents];
       
-      // Personality driven targeting
       if (me.personality === 'Aggressive') {
-        const lowestHp = [...aliveOpponents].sort((a, b) => a.hp - b.hp)[0];
-        if (lowestHp) finalTarget = lowestHp;
-      } else if (me.personality === 'Survivor') {
-        // Survivor prefers to shoot self if safe, or use defense
+        const minHp = Math.min(...possibleTargets.map(p => p.hp));
+        possibleTargets = possibleTargets.filter(p => p.hp === minHp);
+      } else if (me.personality === 'Strategist') {
+        const maxHp = Math.max(...possibleTargets.map(p => p.hp));
+        possibleTargets = possibleTargets.filter(p => p.hp === maxHp);
+      } else if (me.personality === 'Deceiver') {
+        const maxCards = Math.max(...possibleTargets.map(p => p.cards.length));
+        possibleTargets = possibleTargets.filter(p => p.cards.length === maxCards);
       }
 
+      // Pick randomly from the filtered targets (prevents always locking onto player 0 if tied)
+      let finalTarget = possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
+
+      // Marked status overrides personality targeting
       const marked = aliveOpponents.find(p => p.statuses.marked);
       if (marked) finalTarget = marked;
 
+      // 2. Check Peek Status
       if (me.statuses.peeked) {
         if (!state.revolver[state.currentChamber]) {
           dispatch({ type: 'SHOOT', shooterId: me.id, targetId: me.id });
@@ -89,29 +98,44 @@ export default function App() {
         }
       }
 
+      // 3. Card Usage Logic
       if (me.cards.length > 0) {
-        // AI Card Logic
-        const card = me.cards[0]; // Simple AI: just use first card sometimes
-        let useCard = false;
+        let usableCards = me.cards;
+        if (me.personality === 'Aggressive') usableCards = me.cards.filter(c => c.category === 'Attack');
+        else if (me.personality === 'Survivor') usableCards = me.cards.filter(c => c.category === 'Defense' || c.category === 'Revolver');
+        else if (me.personality === 'Strategist') usableCards = me.cards.filter(c => c.category === 'Trick' || c.category === 'Revolver');
+        else if (me.personality === 'Deceiver') usableCards = me.cards.filter(c => c.category === 'Trick' || c.category === 'Attack');
         
-        if (me.personality === 'Strategist' && card.category === 'Trick') useCard = true;
-        if (me.personality === 'Aggressive' && card.category === 'Attack') useCard = true;
-        if (me.personality === 'Survivor' && card.category === 'Defense') useCard = true;
-        if (me.personality === 'Gambler' && Math.random() > 0.3) useCard = true;
-        if (Math.random() > 0.7) useCard = true; // Random chance to use anyway
+        // Fallback if no preferred cards but they want to do something
+        if (usableCards.length === 0 && Math.random() > 0.5) {
+          usableCards = me.cards;
+        }
 
-        if (useCard) {
+        if (usableCards.length > 0 && Math.random() > 0.3) { // 70% chance to use a card
+          const card = usableCards[Math.floor(Math.random() * usableCards.length)];
           let cardTargetId = me.id;
+          
           if (needsTarget(card.type)) {
-            cardTargetId = finalTarget.id;
+            if (card.category === 'Defense') {
+              cardTargetId = me.id; // Self buff
+            } else {
+              cardTargetId = finalTarget.id; // Attack/Trick others
+            }
           }
           dispatch({ type: 'USE_CARD', playerId: me.id, targetId: cardTargetId, card });
           return;
         }
       }
 
-      // Survivor might shoot self if they think it's safe
-      if (me.personality === 'Survivor' && Math.random() > 0.7) {
+      // 4. Shoot Decision
+      // Survivor might shoot self if they think it's safe (e.g., early in the round)
+      if (me.personality === 'Survivor' && state.currentChamber < 2 && Math.random() > 0.6) {
+        dispatch({ type: 'SHOOT', shooterId: me.id, targetId: me.id });
+        return;
+      }
+
+      // Gambler might randomly shoot themselves just for the extra turn thrill
+      if (me.personality === 'Gambler' && Math.random() > 0.8) {
         dispatch({ type: 'SHOOT', shooterId: me.id, targetId: me.id });
         return;
       }
@@ -259,7 +283,7 @@ export default function App() {
               </div>
               <div className={`mt-2 text-sm font-bold text-center ${isTurn ? 'text-emerald-400' : 'text-zinc-400'}`}>
                 {player.name}
-                <div className="text-[10px] font-normal text-zinc-500">{player.role} • {player.playerClass}</div>
+                <div className="text-[10px] font-normal text-zinc-500">{player.role} • {player.personality !== 'None' ? player.personality : player.playerClass}</div>
               </div>
             </div>
           );
