@@ -1,32 +1,40 @@
-import { GameState, Action, Card, CardType, Player } from './types';
+import { GameState, Action, Card, CardType, Player, CardCategory, Role, PlayerClass, AIPersonality, Stats } from './types';
 
-const CARD_TYPES: CardType[] = [
-  'Shield', 'Dodge', 'Reverse Fate', 
-  'Force Shoot', 'Double Fire', 'Mark Target', 
-  'Swap Turn', 'Peek Chamber', 'Shuffle Chamber'
+const CARD_DEFINITIONS: { type: CardType; category: CardCategory; desc: string }[] = [
+  { type: 'Shield', category: 'Defense', desc: 'Block 1 bullet damage.' },
+  { type: 'Dodge', category: 'Defense', desc: '50% chance to dodge a bullet.' },
+  { type: 'Reverse Fate', category: 'Defense', desc: 'If you die, you survive instead.' },
+  { type: 'Iron Skin', category: 'Defense', desc: 'Immune to the next shot.' },
+  { type: 'Second Chance', category: 'Defense', desc: 'Revive with 1 HP if killed.' },
+  { type: 'Mirror Shield', category: 'Defense', desc: 'Reflect bullet back to shooter.' },
+  
+  { type: 'Force Shoot', category: 'Attack', desc: 'Force target to shoot themselves.' },
+  { type: 'Double Fire', category: 'Attack', desc: 'Target must shoot themselves twice.' },
+  { type: 'Mark Target', category: 'Attack', desc: 'Mark target (AI prioritizes them).' },
+  { type: 'Execute', category: 'Attack', desc: 'Instantly kill target if HP is 1.' },
+  { type: 'Chain Shot', category: 'Attack', desc: 'If hit, next player also takes a shot.' },
+  { type: 'Target Lock', category: 'Attack', desc: 'Attacks on target are more accurate.' },
+  
+  { type: 'Swap Turn', category: 'Trick', desc: 'Give current turn to target.' },
+  { type: 'Peek Chamber', category: 'Trick', desc: 'See if next chamber has a bullet.' },
+  { type: 'Shuffle Chamber', category: 'Trick', desc: 'Randomize the revolver chambers.' },
+  { type: 'Steal Card', category: 'Trick', desc: 'Steal a random card from target.' },
+  { type: 'Turn Skip', category: 'Trick', desc: 'Skip target\'s next turn.' },
+  
+  { type: 'Add Bullet', category: 'Revolver', desc: 'Add 1 bullet to a random empty chamber.' },
+  { type: 'Remove Bullet', category: 'Revolver', desc: 'Remove 1 bullet from a random chamber.' },
+  { type: 'Lock Chamber', category: 'Revolver', desc: 'Next shot is GUARANTEED to be a bullet.' },
+  { type: 'Safe Chamber', category: 'Revolver', desc: 'Next shot is GUARANTEED to be empty.' },
 ];
 
-export const getCardDescription = (type: CardType) => {
-  switch(type) {
-    case 'Shield': return 'Block 1 bullet.';
-    case 'Dodge': return '50% chance to dodge a bullet.';
-    case 'Reverse Fate': return 'If you die, you survive instead.';
-    case 'Force Shoot': return 'Force target to shoot themselves.';
-    case 'Double Fire': return 'Target must shoot themselves twice.';
-    case 'Mark Target': return 'Mark target (AI will prioritize them).';
-    case 'Swap Turn': return 'Give the current turn to target.';
-    case 'Peek Chamber': return 'See if the next chamber has a bullet.';
-    case 'Shuffle Chamber': return 'Randomize the revolver chambers.';
-  }
-};
-
 export const getRandomCard = (): Card => {
-  const type = CARD_TYPES[Math.floor(Math.random() * CARD_TYPES.length)];
+  const def = CARD_DEFINITIONS[Math.floor(Math.random() * CARD_DEFINITIONS.length)];
   return {
     id: Math.random().toString(36).substring(2, 9),
-    type,
-    name: type,
-    description: getCardDescription(type)
+    type: def.type,
+    category: def.category,
+    name: def.type,
+    description: def.desc
   };
 };
 
@@ -44,12 +52,38 @@ export const generateRevolver = () => {
   return chambers;
 };
 
+const getBaseStats = (role: Role, pClass: PlayerClass): { hp: number; stats: Stats } => {
+  let hp = 3;
+  let stats: Stats = { accuracy: 50, intelligence: 50, luck: 50, speed: 50, defense: 50 };
+  
+  if (role === 'Assassin') { hp = 2; stats = { accuracy: 80, intelligence: 60, luck: 50, speed: 90, defense: 30 }; }
+  if (role === 'Doctor') { hp = 4; stats = { accuracy: 50, intelligence: 80, luck: 60, speed: 40, defense: 70 }; }
+  if (role === 'Gambler') { hp = 3; stats = { accuracy: 50, intelligence: 50, luck: 95, speed: 60, defense: 40 }; }
+  if (role === 'Strategist') { hp = 3; stats = { accuracy: 60, intelligence: 90, luck: 40, speed: 70, defense: 50 }; }
+  
+  if (pClass === 'Offense') { stats.accuracy += 10; stats.speed += 10; }
+  if (pClass === 'Defense') { hp += 1; stats.defense += 20; }
+  if (pClass === 'Chaos') { stats.luck += 20; stats.accuracy -= 10; }
+  
+  return { hp, stats };
+};
+
+const createPlayer = (id: number, name: string, isHuman: boolean, role: Role, pClass: PlayerClass, personality: AIPersonality): Player => {
+  const { hp, stats } = getBaseStats(role, pClass);
+  return {
+    id, name, isHuman, isAlive: true, hp, maxHp: hp, role, playerClass: pClass, personality, stats,
+    cards: [getRandomCard(), getRandomCard()],
+    statuses: { shield: false, dodge: false, reverseFate: false, ironSkin: false, secondChance: false, mirrorShield: false, marked: false, targetLock: false, peeked: false, turnSkip: false },
+    memory: { successStreak: 0, failStreak: 0 }
+  };
+};
+
 export const createInitialState = (): GameState => {
   const players: Player[] = [
-    { id: 0, name: 'You', isHuman: true, isAlive: true, cards: [getRandomCard()], statuses: { shield: false, dodge: false, reverseFate: false, marked: false, peeked: false } },
-    { id: 1, name: 'AI 1', isHuman: false, isAlive: true, cards: [getRandomCard()], statuses: { shield: false, dodge: false, reverseFate: false, marked: false, peeked: false } },
-    { id: 2, name: 'AI 2', isHuman: false, isAlive: true, cards: [getRandomCard()], statuses: { shield: false, dodge: false, reverseFate: false, marked: false, peeked: false } },
-    { id: 3, name: 'AI 3', isHuman: false, isAlive: true, cards: [getRandomCard()], statuses: { shield: false, dodge: false, reverseFate: false, marked: false, peeked: false } },
+    createPlayer(0, 'You', true, 'Gambler', 'Chaos', 'None'),
+    createPlayer(1, 'AI 1 (Assassin)', false, 'Assassin', 'Offense', 'Aggressive'),
+    createPlayer(2, 'AI 2 (Doctor)', false, 'Doctor', 'Defense', 'Survivor'),
+    createPlayer(3, 'AI 3 (Strategist)', false, 'Strategist', 'Trickster', 'Strategist'),
   ];
 
   return {
@@ -57,59 +91,99 @@ export const createInitialState = (): GameState => {
     currentTurn: 0,
     revolver: generateRevolver(),
     currentChamber: 0,
-    logs: ['Game started. Round 1 begins.'],
+    logs: [{ text: 'Game started. Round 1 begins.', type: 'info' }],
     gameOver: false,
     winner: null,
     round: 1,
+    cameraShake: false,
+    zoomTarget: null
   };
 };
 
-export const gameReducer = (state: GameState, action: Action): GameState => {
-  if (action.type === 'RESET_GAME') {
-    return createInitialState();
-  }
+type RNGOutcome = 'Failed Badly' | 'Failed' | 'Normal' | 'Success' | 'Great Success';
 
-  // Deep clone state for easy mutation
+const rollRNG = (player: Player, baseChance: number = 40): RNGOutcome => {
+  let chance = baseChance;
+  chance += (player.stats.luck - 50) * 0.5;
+  if (player.hp === 1) chance += 15; // Low HP bonus
+  chance += player.memory.failStreak * 10;
+  chance -= player.memory.successStreak * 10;
+  
+  const roll = Math.random() * 100;
+  if (roll < 10) { player.memory.failStreak++; player.memory.successStreak = 0; return 'Failed Badly'; }
+  if (roll < 30) { player.memory.failStreak++; player.memory.successStreak = 0; return 'Failed'; }
+  if (roll < 30 + chance) { player.memory.successStreak++; player.memory.failStreak = 0; return 'Success'; }
+  if (roll < 40 + chance) { player.memory.successStreak += 2; player.memory.failStreak = 0; return 'Great Success'; }
+  return 'Normal';
+};
+
+export const gameReducer = (state: GameState, action: Action): GameState => {
+  if (action.type === 'RESET_GAME') return createInitialState();
+  if (action.type === 'END_ANIMATION') return { ...state, cameraShake: false, zoomTarget: null };
+
   const draft: GameState = JSON.parse(JSON.stringify(state));
+  
+  const addLog = (text: string, type: 'normal' | 'success' | 'danger' | 'info' = 'normal') => {
+    draft.logs.unshift({ text, type });
+    if (draft.logs.length > 50) draft.logs = draft.logs.slice(0, 50);
+  };
 
   const checkReload = () => {
     if (draft.currentChamber >= 6) {
-      draft.logs.unshift(`🔄 Revolver is empty. Reloading...`);
+      addLog(`🔄 Revolver is empty. Reloading...`, 'info');
       draft.revolver = generateRevolver();
       draft.currentChamber = 0;
       draft.round++;
-      draft.players.forEach(p => {
-        if (p.isAlive) p.cards.push(getRandomCard());
-      });
+      draft.players.forEach(p => { if (p.isAlive) p.cards.push(getRandomCard()); });
     }
   };
 
-  const pullTrigger = (targetId: number) => {
-    const isBullet = draft.revolver[draft.currentChamber];
-    const target = draft.players.find(p => p.id === targetId)!;
-    let died = false;
+  const takeDamage = (target: Player, amount: number, shooter?: Player) => {
+    if (target.statuses.ironSkin) { target.statuses.ironSkin = false; addLog(`🛡️ ${target.name}'s Iron Skin blocked the shot!`, 'success'); return false; }
+    if (target.statuses.shield) { target.statuses.shield = false; addLog(`🛡️ ${target.name}'s Shield blocked the shot!`, 'success'); return false; }
+    if (target.statuses.dodge && Math.random() < 0.5) { target.statuses.dodge = false; addLog(`💨 ${target.name} dodged the bullet!`, 'success'); return false; }
+    if (target.statuses.mirrorShield && shooter) {
+      target.statuses.mirrorShield = false;
+      addLog(`🪞 ${target.name} reflected the bullet back to ${shooter.name}!`, 'danger');
+      takeDamage(shooter, amount);
+      return false;
+    }
 
-    if (isBullet) {
-      if (target.statuses.shield) {
-        target.statuses.shield = false;
-        draft.logs.unshift(`🛡️ ${target.name}'s Shield blocked the bullet!`);
-      } else if (target.statuses.dodge && Math.random() < 0.5) {
-        target.statuses.dodge = false;
-        draft.logs.unshift(`💨 ${target.name} dodged the bullet!`);
-      } else if (target.statuses.reverseFate) {
+    target.hp -= amount;
+    addLog(`💥 BANG! ${target.name} took ${amount} damage! (HP: ${target.hp}/${target.maxHp})`, 'danger');
+    draft.cameraShake = true;
+
+    if (target.hp <= 0) {
+      if (target.statuses.reverseFate) {
         target.statuses.reverseFate = false;
-        draft.logs.unshift(`✨ ${target.name}'s Fate was Reversed! They survived!`);
+        target.hp = 1;
+        addLog(`✨ ${target.name}'s Fate was Reversed! They survived with 1 HP!`, 'success');
+      } else if (target.statuses.secondChance) {
+        target.statuses.secondChance = false;
+        target.hp = 1;
+        addLog(`👼 ${target.name} used Second Chance and revived!`, 'success');
       } else {
         target.isAlive = false;
-        died = true;
-        draft.logs.unshift(`💥 BANG! ${target.name} was shot and died!`);
+        addLog(`💀 ${target.name} died!`, 'danger');
       }
+    }
+    return true;
+  };
+
+  const pullTrigger = (shooterId: number, targetId: number) => {
+    const isBullet = draft.revolver[draft.currentChamber];
+    const shooter = draft.players.find(p => p.id === shooterId)!;
+    const target = draft.players.find(p => p.id === targetId)!;
+    draft.zoomTarget = targetId;
+
+    if (isBullet) {
+      takeDamage(target, 1, shooter);
     } else {
-      draft.logs.unshift(`😮‍💨 Click. Chamber was empty for ${target.name}.`);
+      addLog(`😮‍💨 Click. Chamber was empty for ${target.name}.`, 'normal');
     }
 
     draft.currentChamber++;
-    return { isBullet, died };
+    return isBullet;
   };
 
   const checkGameOver = () => {
@@ -117,10 +191,10 @@ export const gameReducer = (state: GameState, action: Action): GameState => {
     if (alive.length === 1) {
       draft.gameOver = true;
       draft.winner = alive[0];
-      draft.logs.unshift(`🏆 ${alive[0].name} is the Last Mind Standing!`);
+      addLog(`🏆 ${alive[0].name} is the Last Mind Standing!`, 'success');
     } else if (alive.length === 0) {
       draft.gameOver = true;
-      draft.logs.unshift(`💀 Everyone died. Draw.`);
+      addLog(`💀 Everyone died. Draw.`, 'danger');
     }
   };
 
@@ -132,11 +206,18 @@ export const gameReducer = (state: GameState, action: Action): GameState => {
       draft.currentTurn = extraTurnId;
     } else {
       let next = (draft.currentTurn + 1) % 4;
-      while (!draft.players[next].isAlive) {
+      let loops = 0;
+      while ((!draft.players[next].isAlive || draft.players[next].statuses.turnSkip) && loops < 4) {
+        if (draft.players[next].statuses.turnSkip) {
+          draft.players[next].statuses.turnSkip = false;
+          addLog(`⏭️ ${draft.players[next].name}'s turn was skipped!`, 'info');
+        }
         next = (next + 1) % 4;
+        loops++;
       }
       draft.currentTurn = next;
     }
+    draft.zoomTarget = draft.currentTurn;
   };
 
   switch (action.type) {
@@ -145,14 +226,22 @@ export const gameReducer = (state: GameState, action: Action): GameState => {
       const shooter = draft.players.find(p => p.id === shooterId)!;
       const target = draft.players.find(p => p.id === targetId)!;
 
-      draft.logs.unshift(`🔫 ${shooter.name} points the gun at ${target.name}...`);
-      const { isBullet } = pullTrigger(targetId);
+      addLog(`🔫 ${shooter.name} points the gun at ${target.name}...`, 'normal');
+      
+      const outcome = rollRNG(shooter);
+      if (outcome === 'Failed Badly') {
+        addLog(`❌ Gun jammed! Turn lost.`, 'danger');
+        nextTurn();
+        break;
+      }
+
+      const isBullet = pullTrigger(shooterId, targetId);
 
       checkGameOver();
 
       if (!draft.gameOver) {
         if (shooterId === targetId && !isBullet) {
-          draft.logs.unshift(`✨ ${shooter.name} gets an extra turn for surviving a self-shot!`);
+          addLog(`✨ ${shooter.name} gets an extra turn for surviving a self-shot!`, 'success');
           nextTurn(shooterId);
         } else {
           nextTurn();
@@ -168,7 +257,7 @@ export const gameReducer = (state: GameState, action: Action): GameState => {
       const cardIndex = player.cards.findIndex(c => c.id === card.id);
       if (cardIndex > -1) player.cards.splice(cardIndex, 1);
 
-      draft.logs.unshift(`🃏 ${player.name} uses ${card.name}${playerId !== targetId ? ` on ${target.name}` : ''}!`);
+      addLog(`🃏 ${player.name} uses ${card.name}${playerId !== targetId ? ` on ${target.name}` : ''}!`, 'info');
 
       let extraTurnId: number | undefined;
 
@@ -176,44 +265,73 @@ export const gameReducer = (state: GameState, action: Action): GameState => {
         case 'Shield': target.statuses.shield = true; break;
         case 'Dodge': target.statuses.dodge = true; break;
         case 'Reverse Fate': target.statuses.reverseFate = true; break;
+        case 'Iron Skin': target.statuses.ironSkin = true; break;
+        case 'Second Chance': target.statuses.secondChance = true; break;
+        case 'Mirror Shield': target.statuses.mirrorShield = true; break;
+        
         case 'Mark Target': target.statuses.marked = true; break;
+        case 'Target Lock': target.statuses.targetLock = true; break;
+        case 'Execute': 
+          if (target.hp === 1) { addLog(`💀 ${target.name} was Executed!`, 'danger'); target.hp = 0; target.isAlive = false; }
+          else { addLog(`❌ Execute failed, ${target.name} has too much HP.`, 'normal'); }
+          break;
+        
         case 'Peek Chamber': player.statuses.peeked = true; break;
-        case 'Shuffle Chamber':
-          draft.revolver = generateRevolver();
-          draft.currentChamber = 0;
-          draft.logs.unshift(`🔄 The chamber was shuffled!`);
+        case 'Shuffle Chamber': draft.revolver = generateRevolver(); draft.currentChamber = 0; addLog(`🔄 Chamber shuffled!`, 'info'); break;
+        case 'Swap Turn': extraTurnId = targetId; break;
+        case 'Turn Skip': target.statuses.turnSkip = true; break;
+        case 'Steal Card': 
+          if (target.cards.length > 0) {
+            const stolen = target.cards.splice(Math.floor(Math.random() * target.cards.length), 1)[0];
+            player.cards.push(stolen);
+            addLog(`😈 ${player.name} stole a card from ${target.name}!`, 'success');
+          }
           break;
-        case 'Swap Turn':
-          extraTurnId = targetId;
+
+        case 'Add Bullet':
+          const emptyIdx = draft.revolver.findIndex((b, i) => !b && i >= draft.currentChamber);
+          if (emptyIdx !== -1) { draft.revolver[emptyIdx] = true; addLog(`🔫 A bullet was added!`, 'danger'); }
           break;
+        case 'Remove Bullet':
+          const bulletIdx = draft.revolver.findIndex((b, i) => b && i >= draft.currentChamber);
+          if (bulletIdx !== -1) { draft.revolver[bulletIdx] = false; addLog(`😮‍💨 A bullet was removed!`, 'success'); }
+          break;
+        case 'Lock Chamber': draft.revolver[draft.currentChamber] = true; addLog(`💀 Next shot is LOCKED!`, 'danger'); break;
+        case 'Safe Chamber': draft.revolver[draft.currentChamber] = false; addLog(`🛡️ Next shot is SAFE!`, 'success'); break;
+
         case 'Force Shoot':
-          draft.logs.unshift(`🎯 ${target.name} is forced to shoot themselves!`);
-          pullTrigger(targetId);
+          addLog(`🎯 ${target.name} is forced to shoot themselves!`, 'danger');
+          pullTrigger(targetId, targetId);
           break;
         case 'Double Fire':
-          draft.logs.unshift(`🎯 ${target.name} is forced to shoot themselves TWICE!`);
-          const res1 = pullTrigger(targetId);
-          if (!res1.died) {
-            checkReload();
-            pullTrigger(targetId);
-          }
+          addLog(`🎯 ${target.name} is forced to shoot themselves TWICE!`, 'danger');
+          const isB1 = pullTrigger(targetId, targetId);
+          if (target.isAlive) { checkReload(); pullTrigger(targetId, targetId); }
           break;
       }
 
       checkGameOver();
-      if (!draft.gameOver) {
+      if (!draft.gameOver && !['Force Shoot', 'Double Fire'].includes(card.type)) {
+        // Using a card doesn't end turn unless it's an attack that pulls trigger
+        // Actually, let's make using a card NOT end turn, so you can combo.
+        // Wait, if it doesn't end turn, player can spam. Let's keep it ending turn for now, except for peek.
+        if (card.type === 'Peek Chamber') {
+          // don't end turn
+        } else {
+          nextTurn(extraTurnId);
+        }
+      } else if (!draft.gameOver) {
         nextTurn(extraTurnId);
       }
       break;
     }
   }
 
-  // keep logs limited
-  if (draft.logs.length > 50) {
-    draft.logs = draft.logs.slice(0, 50);
-  }
-
   return draft;
 };
 
-export const needsTarget = (type: CardType) => ['Force Shoot', 'Double Fire', 'Mark Target', 'Swap Turn'].includes(type);
+export const needsTarget = (type: CardType) => [
+  'Force Shoot', 'Double Fire', 'Mark Target', 'Swap Turn', 'Steal Card', 'Turn Skip', 
+  'Execute', 'Chain Shot', 'Target Lock', 'Mirror Shield'
+].includes(type);
+
